@@ -4,12 +4,14 @@ import * as _AWS from 'aws-sdk';
 declare module "dynamoose" {
   export var AWS: typeof _AWS;
 
-  export function local(url: string): void;
   export function model<DataSchema, KeySchema, ModelSchema extends Model<DataSchema>>(
     modelName: string,
     schema: Schema,
     options?: ModelOption
   ): ModelConstructor<DataSchema, KeySchema, ModelSchema>;
+  export function local(url?: string): void;
+  export function documentClient(): _AWS.DynamoDB.DocumentClient;
+  export function ddb(): _AWS.DynamoDB;
   export function setDefaults(options: ModelOption): void;
 
   export interface ModelOption {
@@ -26,8 +28,10 @@ declare module "dynamoose" {
   export class Schema {
     constructor(schema: SchemaAttributes, options?: SchemaOptions);
     method(name: string, fn: any): any;
+    method(name: object): any;
     parseDynamo(model: any, dynamoObj: any): any;
     static(name: string, fn: any): any;
+    static(name: object): any;
     toDynamo(model: any): any;
     virtual(name: string, options: any): any;
     virtualpath(name: string): any;
@@ -35,7 +39,7 @@ declare module "dynamoose" {
 
   export interface SchemaAttributeDefinition<Constructor, Type> {
     type: Constructor;
-    validate?: (v: Type) => boolean;
+    validate?: (v: Type) => boolean | RegExp | string;
     hashKey?: boolean;
     rangeKey?: boolean;
     required?: boolean;
@@ -52,7 +56,7 @@ declare module "dynamoose" {
     default?: (() => Type) | Type
   }
   export interface SchemaOptions {
-    throughput?: boolean | { read: number, write: number };
+    throughput?: number | { read: number, write: number };
     useNativeBooleans?: boolean;
     useDocumentTypes?: boolean;
     timestamps?: boolean | { createdAt: string, updatedAt: string };
@@ -60,8 +64,8 @@ declare module "dynamoose" {
     saveUnknown?: boolean;
 
     // @todo more strong type definition
-    attributeToDynamo: (name: string, json: any, model: any, defaultFormatter: any) => any;
-    attributeFromDynamo: (name: string, json: any, fallback: any) => any;
+    attributeToDynamo?: (name: string, json: any, model: any, defaultFormatter: any) => any;
+    attributeFromDynamo?: (name: string, json: any, fallback: any) => any;
   }
 
   export interface SchemaAttributes {
@@ -108,16 +112,13 @@ declare module "dynamoose" {
    */
   export class Model<ModelData> {
     constructor(obj: ModelData);
-    put(options: PutOptions, callback: (err: Error) => void): Promise<Model<ModelData>>;
-    save(options: SaveOptions, callback: (err: Error) => void): Promise<Model<ModelData>>;
-
-    delete(callback?: (err: Error) => void): Promise<undefined>;
-
-    put(callback: (err: Error) => void): Promise<Model<ModelData>>;
-    put(options: ModelData, callback?: (err: Error) => void): Promise<Model<ModelData>>;
-
+    put(callback?: (err: Error) => void): Promise<Model<ModelData>>;
+    put(options: PutOptions, callback?: (err: Error) => void): Promise<Model<ModelData>>;
     save(callback?: (err: Error) => void): Promise<Model<ModelData>>;
-    save(options: ModelData, callback?: (err: Error) => void): Promise<Model<ModelData>>;
+    save(options: SaveOptions, callback?: (err: Error) => void): Promise<Model<ModelData>>;
+
+    delete(options: DeleteOptions, callback?: (err: Error) => void): Promise<undefined>;
+    delete(callback?: (err: Error) => void): Promise<undefined>;
 
     // @todo missing populate support (e.g. populated path)
     populate<T>(path: string | { path: string, model: string }): Promise<Model<ModelData> & T>
@@ -127,21 +128,24 @@ declare module "dynamoose" {
     /**
      * Overwrite existing item. Defaults to true.
      */
-    overwrite: boolean;
+    overwrite?: boolean;
     /**
      * An expression for a conditional update. See the AWS documentation for more information about condition expressions.
      */
-    condition: string;
+    condition?: string;
     /**
     * A map of name substitutions for the condition expression.
     */
-    conditionNames: any;
+    conditionNames?: any;
     /**
     * A map of values for the condition expression. Note that in order for automatic object conversion to work, the keys in this object must match schema attribute names.
     */
-    conditionValues: any;
+    conditionValues?: any;
   }
   type SaveOptions = PutOptions;
+  export interface DeleteOptions {
+    update?: any;
+  }
 
   export interface ModelConstructor<DataSchema, KeySchema, Model> {
     new (value?: DataSchema): Model;
@@ -162,9 +166,8 @@ declare module "dynamoose" {
     queryOne(query: QueryFilter, callback?: (err: Error, results: Model) => void): QueryInterface<Model, Model>;
     scan(filter?: ScanFilter, callback?: (err: Error, results: Model[]) => void): ScanInterface<Model>;
 
-    update(key: KeySchema, update: UpdateUpdate<DataSchema>, options: UpdateOption, callback: (err: Error, items: Model[]) => void): void;
-    update(key: KeySchema, update: UpdateUpdate<DataSchema>, callback: (err: Error, items: Model[]) => void): void;
-    update(key: KeySchema, update: UpdateUpdate<DataSchema>, options?: UpdateOption): Promise<Model>;
+    update(key: KeySchema, update: UpdateUpdate<DataSchema>, options?: UpdateOption, callback?: (err: Error, items: Model[]) => void): void;
+    update(key: KeySchema, update: UpdateUpdate<DataSchema>, callback?: (err: Error, items: Model[]) => void): void;
   }
   /**
    * Update
@@ -278,6 +281,4 @@ declare module "dynamoose" {
     get(fn: any): any;
     set(fn: any): any;
   }
-
-  export function local(url?: string): void;
 }
